@@ -35,7 +35,10 @@
         async function startApp() {
             try {
                 // 1. スマホやPCのカメラ映像を取得して画面に流す
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: false 
+                });
                 video.srcObject = stream;
 
                 // 2. Googleの学習済みAIモデル（MobileNet）をローカルに読み込む
@@ -59,9 +62,9 @@
                 if (predictions.length > 0) {
                     // 一番確率が高い結果（英語）と、その確率（％）を取得
                     const topResult = predictions[0].className;
-                    const probability = Math.round(topResult.probability * 100);
+                    const probability = Math.round(predictions[0].probability * 100);
                     
-                    // 画面に結果を表示（例: "mouse, 85%"）
+                    // 画面に結果を表示（例: "mouse (85%)"）
                     resultDiv.innerText = `${topResult} (${probability}%)`;
                 }
             }
