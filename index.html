@@ -32,14 +32,13 @@
 <body>
 
     <h2>Google MediaPipe 物体認識</h2>
-    <div id="status">初期設定中...</div>
+    <div id="status">ライブラリの読み込みを待っています...</div>
     
     <div class="container" id="container">
         <video id="video" autoplay playsinline muted></video>
     </div>
 
     <script>
-        // iOSでのフリーズを防ぐため、script type="module" をやめて通常の関数として定義
         const video = document.getElementById('video');
         const statusDiv = document.getElementById('status');
         const container = document.getElementById('container');
@@ -62,21 +61,27 @@
 
         // 2. AIモデルの初期化
         async function initAI() {
-            statusDiv.innerText = "AIライブラリを読み込み中...";
+            // 万が一 mpTasksVision がまだなくても、ここで存在をチェックして待つ
+            if (typeof mpTasksVision === "undefined") {
+                statusDiv.innerText = "ライブラリの準備が遅れています。1秒後に再試行します...";
+                setTimeout(initAI, 1000);
+                return;
+            }
+
+            statusDiv.innerText = "カメラを起動中...";
             await setupCamera();
             
+            statusDiv.innerText = "Google AIモデルをダウンロード中...";
+            
             try {
-                // iOSでバグを起こしにくい読み込み方に修正
                 const vision = await mpTasksVision.FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
                 );
 
-                statusDiv.innerText = "Google AIモデルをダウンロード中...";
-
                 objectDetector = await mpTasksVision.ObjectDetector.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
-                        delegate: "CPU" // iPhone15のCPUは爆速なのでCPUで安全に動かします
+                        delegate: "CPU"
                     },
                     scoreThreshold: 0.5,
                     runningMode: "VIDEO"
@@ -146,8 +151,8 @@
             window.requestAnimationFrame(predictLoop);
         }
 
-        // 起動
-        initAI();
+        // 画面が完全に読み込まれてから初期化をスタートさせる
+        window.addEventListener('load', initAI);
     </script>
 </body>
 </html>
