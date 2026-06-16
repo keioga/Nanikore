@@ -1,13 +1,12 @@
-// ネット上（CDN）から必要な機能を直接インポートして合体
-import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs";
+// TensorFlow.js 本体と、1000種類を識別する MobileNet モデルをインポート
+import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
+import * as mobilenet from 'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.mjs';
 
 const video = document.getElementById('video');
 const statusDiv = document.getElementById('status');
-const container = document.getElementById('container');
-let objectDetector;
-let children = [];
+let model;
 
-// 1. カメラ起動
+// 1. カメラの起動
 async function setupCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -21,82 +20,42 @@ async function setupCamera() {
     }
 }
 
-// 2. AIモデルの初期化
+// 2. AIモデル（1000種類）の読み込み
 async function initAI() {
-    statusDiv.innerText = "カメラとAIモデルを準備中...";
+    statusDiv.innerText = "カメラと1000種類識別AIを準備中...";
     await setupCamera();
     
     try {
-        // WASMファイルをロード
-        const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
-        );
-
-        // モデル（AI）をロード
-        objectDetector = await ObjectDetector.createFromOptions(vision, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
-                delegate: "CPU"
-            },
-            scoreThreshold: 0.5,
-            runningMode: "VIDEO"
-        });
-        
+        // Googleの1000種類識別モデルをロード
+        model = await mobilenet.load({ version: 2, alpha: 1.0 });
         statusDiv.innerText = "準備完了！カメラに物を映してください。";
         predictLoop();
     } catch (e) {
-        statusDiv.innerText = "エラーが発生しました: " + e.message;
+        statusDiv.innerText = "AIの読み込みに失敗しました: " + e.message;
         console.error(e);
     }
 }
 
-
-
-let lastTime = -1;
+// 3. 爆速仕分けの無限ループ
 async function predictLoop() {
-    if (video.currentTime !== lastTime && video.readyState === video.HAVE_ENOUGH_DATA) {
-        lastTime = video.currentTime;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // カメラの映像（現在の1コマ）から、上位3つの候補を爆速で推測
+        // 枠の計算がないため、ここの処理スピードがMediaPipeより圧倒的に速いです
+        const predictions = await model.classify(video, 3);
         
-        const startTimeMs = performance.now();
-        const detections = objectDetector.detectForVideo(video, startTimeMs).detections;
-        
-        for (let i = 0; i < children.length; i++) {
-            container.removeChild(children[i]);
-        }
-        children.splice(0);
-
-        for (let detection of detections) {
-            const score = Math.round(detection.categories[0].score * 100);
-            const englishLabel = detection.categories[0].categoryName;
-            const labelText = detection.categories[0].categoryName;
-
-            const videoWidth = video.offsetWidth;
-            const videoHeight = video.offsetHeight;
+        if (predictions && predictions.length > 0) {
+            // 最も確率が高い第1候補（[0]番目）の名前と確率（%）を取得
+            const topResult = predictions[0];
+            const name = topResult.className;
+            const score = Math.round(topResult.probability * 100);
             
-            const boundingBox = detection.boundingBox;
-            const left = (boundingBox.originX / video.videoWidth) * videoWidth;
-            const top = (boundingBox.originY / video.videoHeight) * videoHeight;
-            const width = (boundingBox.width / video.videoWidth) * videoWidth;
-            const height = (boundingBox.height / video.videoHeight) * videoHeight;
-
-            const highlighter = document.createElement('div');
-            highlighter.setAttribute('class', 'highlighter');
-            highlighter.style.left = `${left}px`;
-            highlighter.style.top = `${top}px`;
-            highlighter.style.width = `${width}px`;
-            highlighter.style.height = `${height}px`;
-
-            const label = document.createElement('p');
-            label.setAttribute('class', 'label');
-            label.innerText = `${labelText} (${score}%)`;
-            
-            highlighter.appendChild(label);
-            container.appendChild(highlighter);
-            children.push(highlighter);
+            // 画面のステータス表示をリアルタイムに書き換える
+            statusDiv.innerHTML = `<span style="font-size: 1.8rem; font-weight: bold; color: #00df89;">${name}</span> (${score}%)`;
         }
     }
+    // 画面の更新タイミング（1秒間に約60回）に合わせて次の判定を予約
     window.requestAnimationFrame(predictLoop);
 }
 
-// 起動
+// アプリの起動
 initAI();
