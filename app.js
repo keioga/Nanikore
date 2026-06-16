@@ -38,7 +38,8 @@ async function initAI() {
 
 // 3. 爆速仕分けの無限ループ
 async function predictLoop() {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    // if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    if (video.readyState >= 2) {
         // カメラの映像（現在の1コマ）から、上位3つの候補を爆速で推測
         // 枠の計算がないため、ここの処理スピードがMediaPipeより圧倒的に速いです
         const predictions = await model.classify(video, 3);
