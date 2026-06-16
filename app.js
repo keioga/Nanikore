@@ -1,7 +1,3 @@
-// TensorFlow.js 本体と、1000種類を識別する MobileNet モデルをインポート
-import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
-import * as mobilenet from 'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.mjs';
-
 const video = document.getElementById('video');
 const statusDiv = document.getElementById('status');
 let model;
@@ -26,7 +22,6 @@ async function initAI() {
     await setupCamera();
     
     try {
-        // Googleの1000種類識別モデルをロード
         model = await mobilenet.load({ version: 2, alpha: 1.0 });
         statusDiv.innerText = "準備完了！カメラに物を映してください。";
         predictLoop();
@@ -38,25 +33,25 @@ async function initAI() {
 
 // 3. 爆速仕分けの無限ループ
 async function predictLoop() {
-    // if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    // ★ iPhoneの動画再生バグを回避するため、条件を「映像データが少しでもあれば動く」に変更
     if (video.readyState >= 2) {
-        // カメラの映像（現在の1コマ）から、上位3つの候補を爆速で推測
-        // 枠の計算がないため、ここの処理スピードがMediaPipeより圧倒的に速いです
-        const predictions = await model.classify(video, 3);
-        
-        if (predictions && predictions.length > 0) {
-            // 最も確率が高い第1候補（[0]番目）の名前と確率（%）を取得
-            const topResult = predictions[0];
-            const name = topResult.className;
-            const score = Math.round(topResult.probability * 100);
+        try {
+            const predictions = await model.classify(video, 3);
             
-            // 画面のステータス表示をリアルタイムに書き換える
-            statusDiv.innerHTML = `<span style="font-size: 1.8rem; font-weight: bold; color: #00df89;">${name}</span> (${score}%)`;
+            if (predictions && predictions.length > 0) {
+                const topResult = predictions[0];
+                const name = topResult.className;
+                const score = Math.round(topResult.probability * 100);
+                
+                // 画面の文字をリアルタイムに書き換える
+                statusDiv.innerHTML = `<span style="font-size: 1.8rem; font-weight: bold; color: #00df89;">${name}</span> (${score}%)`;
+            }
+        } catch (err) {
+            // エラーが出てもループを止めない
+            console.error(err);
         }
     }
-    // 画面の更新タイミング（1秒間に約60回）に合わせて次の判定を予約
     window.requestAnimationFrame(predictLoop);
 }
 
-// アプリの起動
-initAI();
+window.addEventListener('load', initAI);
