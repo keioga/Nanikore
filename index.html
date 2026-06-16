@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AO入試デモ：エッジAIカメラ</title>
+    <!-- ① Googleが提供するAI（TensorFlow.jsとMobileNet）を読み込む -->
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 20px; }
+        video { width: 100%; max-width: 400px; border-radius: 10px; background: #000; }
+        #result { font-size: 24px; font-weight: bold; color: #007bff; margin-top: 15px; }
+        #status { color: #666; }
+    </style>
+</head>
+<body>
+
+    <h2>エッジAI 画像解析デモ</h2>
+    <div id="status">AIモデルを読み込んでいます（数秒かかります）...</div>
+    
+    <!-- ② カメラの映像を映す場所 -->
+    <video id="webcam" autoplay playsinline muted></video>
+    
+    <!-- ③ AIが判定した結果を表示する場所 -->
+    <div id="result">---</div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const resultDiv = document.getElementById('result');
+        const statusDiv = document.getElementById('status');
+        let model;
+
+        // ③ カメラとAIを起動するメイン処理
+        async function startApp() {
+            try {
+                // 1. スマホやPCのカメラ映像を取得して画面に流す
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                video.srcObject = stream;
+
+                // 2. Googleの学習済みAIモデル（MobileNet）をローカルに読み込む
+                model = await mobilenet.load();
+                statusDiv.innerText = "AI起動完了！カメラに物を映してください。";
+
+                // 3. リアルタイムで画像解析をループさせる
+                predictLoop();
+            } catch (err) {
+                statusDiv.innerText = "エラー: カメラの起動またはAIの読み込みに失敗しました。";
+                console.error(err);
+            }
+        }
+
+        // ④ 1秒間に数回、カメラの映像をAIに判定させるループ関数
+        async function predictLoop() {
+            if (model && video.readyState === 4) {
+                // カメラの「今この瞬間」の画像をAIに入力して判定（推論）させる
+                const predictions = await model.classify(video);
+                
+                if (predictions.length > 0) {
+                    // 一番確率が高い結果（英語）と、その確率（％）を取得
+                    const topResult = predictions[0].className;
+                    const probability = Math.round(topResult.probability * 100);
+                    
+                    // 画面に結果を表示（例: "mouse, 85%"）
+                    resultDiv.innerText = `${topResult} (${probability}%)`;
+                }
+            }
+            // 次のフレームも続けて判定する（ループさせる）
+            requestAnimationFrame(predictLoop);
+        }
+
+        // アプリを起動
+        startApp();
+    </script>
+</body>
+</html>
