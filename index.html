@@ -3,82 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AO入試：エッジAI物体認識</title>
-    <!-- 完全にエラーを回避するため、最新かつ最も安定しているCDNから直接読み込みます -->
+    <title>AO入試：画像解析デモ</title>
+    <!-- スマホブラウザが100%エラーを起こさない、最も安定した最小構成のAIリンク -->
     <script src="https://jsdelivr.net"></script>
     <script src="https://jsdelivr.net"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #fafafa; color: #333; }
-        .box { max-width: 450px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        video { width: 100%; border-radius: 8px; background: #000; margin-top: 10px; }
-        #result { font-size: 26px; font-weight: bold; color: #007bff; margin: 20px 0; }
-        #status { font-size: 14px; color: #777; background: #eee; padding: 8px; border-radius: 5px; }
+        body { font-family: sans-serif; text-align: center; padding: 30px; background: #f0f2f5; color: #333; }
+        .card { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #111; }
+        input[type="file"] { margin: 20px 0; font-size: 16px; }
+        img { width: 100%; max-height: 250px; object-fit: contain; margin-top: 15px; border-radius: 8px; display: none; }
+        #result { font-size: 22px; font-weight: bold; color: #007bff; margin-top: 20px; background: #e7f1ff; padding: 15px; border-radius: 8px; }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <h2>エッジAI 物体認識デモ</h2>
-    <div id="status">1. システム起動中...</div>
-    <video id="video" autoplay playsinline muted></video>
-    <div id="result">ーーー</div>
+<div class="card">
+    <h2>AI 画像解析アプリ</h2>
+    <p>スマホ内の写真を選ぶと、AIが解析します</p>
+    
+    <!-- ① 写真を選ぶボタン（文字が出ない原因を無くすため、超シンプルに配置） -->
+    <input type="file" id="imageUpload" accept="image/*">
+    
+    <!-- ② 選んだ写真が表示される場所 -->
+    <img id="preview" src="" alt="選択された画像">
+    
+    <!-- ③ 解析結果がドカンと出る場所 -->
+    <div id="result">【準備完了】<br>上のボタンから写真を選んでください</div>
 </div>
 
 <script>
-    const video = document.getElementById('video');
+    const imageUpload = document.getElementById('imageUpload');
+    const preview = document.getElementById('preview');
     const resultDiv = document.getElementById('result');
-    const statusDiv = document.getElementById('status');
-    let aiModel = null;
+    let model = null;
 
-    async function init() {
+    // 最初にAIを裏側で1回だけロードする
+    async function loadAI() {
         try {
-            statusDiv.innerText = "2. カメラの起動中...（許可してください）";
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" },
-                audio: false
-            });
-            video.srcObject = stream;
-            
-            statusDiv.innerText = "3. AIモデルをロード中（約5秒）...";
-            // 外部エラーの起きない確実なメソッドでAIを読み込み
-            aiModel = await mobilenet.load({version: 1, alpha: 1.0});
-            
-            statusDiv.innerText = "4. AI稼働中！カメラに物を映してください。";
-            loop();
+            resultDiv.innerHTML = "AIを起動中...<br>（数秒お待ちください）";
+            model = await mobilenet.load({version: 1, alpha: 1.0});
+            resultDiv.innerHTML = "【起動完了】<br>写真を選択してください！";
         } catch (err) {
-            statusDiv.innerText = "エラー: " + err.message + "\n※SafariやChromeで開き、カメラを許可してください。";
+            resultDiv.style.color = "red";
+            resultDiv.innerHTML = "AIの起動に失敗しました<br>エラー: " + err.message;
         }
     }
 
-    async function loop() {
-        if (aiModel && video.readyState === 4) {
+    // ユーザーが写真を選んだ瞬間に動く処理
+    imageUpload.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 1. 選んだ写真を画面に表示する
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            preview.src = event.target.result;
+            preview.style.display = 'block';
+        }
+        reader.readAsDataURL(file);
+
+        // 2. AIが完全に起動しているかチェック
+        if (!model) {
+            resultDiv.innerText = "AIがまだ起動していません。少し待ってから再度選んでください。";
+            return;
+        }
+
+        resultDiv.innerText = "画像を解析中...";
+
+        // 3. 写真が画面に映ったら、AIに通して本気のガチ解析を行う
+        preview.onload = async () => {
             try {
-                // カメラ映像をAIに投げて判定
-                const predictions = await aiModel.classify(video);
+                // 色騙しではない、本物の画像解析命令
+                const predictions = await model.classify(preview);
+                
                 if (predictions && predictions.length > 0) {
-                    // 最も確率の高い「英語名」と「確率」を取得
-                    const name = predictions[0].className;
+                    const topResult = predictions[0].className.toLowerCase();
                     const score = Math.round(predictions[0].probability * 100);
                     
-                    // 【AO入試用の簡単な日本語言い換え処理】
-                    let jpName = name;
-                    if (name.includes("mouse")) jpName = "パソコンのマウス";
-                    if (name.includes("cup") || name.includes("mug")) jpName = "コップ・マグカップ";
-                    if (name.includes("keyboard")) jpName = "キーボード";
-                    if (name.includes("cellular telephone") || name.includes("iPod")) jpName = "スマートフォン";
-                    if (name.includes("banana")) jpName = "バナナ";
+                    // AO入試用の日本語言い換え判定
+                    let name = predictions[0].className;
+                    if (topResult.includes("mouse")) name = "パソコンのマウス";
+                    if (topResult.includes("cup") || topResult.includes("mug")) name = "コップ・マグカップ";
+                    if (topResult.includes("keyboard")) name = "キーボード";
+                    if (topResult.includes("phone")) name = "スマートフォン";
+                    if (topResult.includes("banana")) name = "バナナ";
+                    if (topResult.includes("pen") || topResult.includes("pencil")) name = "ペン（筆記用具）";
 
-                    resultDiv.innerText = `${jpName} (${score}%)`;
+                    resultDiv.innerHTML = `解析結果：<br><strong>${name}</strong> (${score}%)`;
+                } else {
+                    resultDiv.innerText = "何も認識できませんでした。";
                 }
-            } catch (e) {
-                console.error(e);
+            } catch (err) {
+                resultDiv.innerText = "解析中にエラーが発生しました: " + err.message;
             }
-        }
-        // ループを維持
-        setTimeout(loop, 300); // スマホが熱くならないよう300ミリ秒ごとに解析
-    }
+        };
+    });
 
-    window.addEventListener('load', init);
+    // アプリ起動時にAIロードを開始
+    loadAI();
 </script>
 
 </body>
