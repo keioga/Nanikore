@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Google MediaPipe カメラ認識 PWA</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.js" crossorigin="anonymous"></script>
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f0f2f5; }
         .container { position: relative; width: 100%; max-width: 500px; margin: 0 auto; }
@@ -32,13 +31,15 @@
 <body>
 
     <h2>Google MediaPipe 物体認識</h2>
-    <div id="status">ライブラリの読み込みを待っています...</div>
+    <div id="status">システムを起動中...</div>
     
     <div class="container" id="container">
         <video id="video" autoplay playsinline muted></video>
     </div>
 
-    <script>
+    <script type="module">
+        import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs";
+
         const video = document.getElementById('video');
         const statusDiv = document.getElementById('status');
         const container = document.getElementById('container');
@@ -61,24 +62,17 @@
 
         // 2. AIモデルの初期化
         async function initAI() {
-            // 万が一 mpTasksVision がまだなくても、ここで存在をチェックして待つ
-            if (typeof mpTasksVision === "undefined") {
-                statusDiv.innerText = "ライブラリの準備が遅れています。1秒後に再試行します...";
-                setTimeout(initAI, 1000);
-                return;
-            }
-
-            statusDiv.innerText = "カメラを起動中...";
+            statusDiv.innerText = "カメラとAIモデルを準備中...";
             await setupCamera();
             
-            statusDiv.innerText = "Google AIモデルをダウンロード中...";
-            
             try {
-                const vision = await mpTasksVision.FilesetResolver.forVisionTasks(
+                // WASMファイルをロード
+                const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
                 );
 
-                objectDetector = await mpTasksVision.ObjectDetector.createFromOptions(vision, {
+                // モデル（AI）をロード
+                objectDetector = await ObjectDetector.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
                         delegate: "CPU"
@@ -151,8 +145,8 @@
             window.requestAnimationFrame(predictLoop);
         }
 
-        // 画面が完全に読み込まれてから初期化をスタートさせる
-        window.addEventListener('load', initAI);
+        // 起動
+        initAI();
     </script>
 </body>
 </html>
