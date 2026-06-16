@@ -4,26 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AO入試デモ：エッジAIカメラ</title>
-    <!-- ① Googleが提供するAI（TensorFlow.jsとMobileNet）を読み込む -->
+    <!-- ① AIライブラリの読み込み -->
     <script src="https://jsdelivr.net"></script>
     <script src="https://jsdelivr.net"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 20px; }
-        video { width: 100%; max-width: 400px; border-radius: 10px; background: #000; }
-        #result { font-size: 24px; font-weight: bold; color: #007bff; margin-top: 15px; }
-        #status { color: #666; }
+        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        video { width: 100%; border-radius: 10px; background: #000; transform: scaleX(1); }
+        #result { font-size: 24px; font-weight: bold; color: #007bff; margin-top: 15px; min-height: 36px; }
+        #status { color: #666; font-size: 14px; margin-bottom: 15px; background: #eee; padding: 10px; border-radius: 5px; word-break: break-all; }
     </style>
 </head>
 <body>
 
-    <h2>エッジAI 画像解析デモ</h2>
-    <div id="status">AIモデルを読み込んでいます（数秒かかります）...</div>
-    
-    <!-- ② カメラの映像を映す場所 -->
-    <video id="webcam" autoplay playsinline muted></video>
-    
-    <!-- ③ AIが判定した結果を表示する場所 -->
-    <div id="result">---</div>
+    <div class="container">
+        <h2>エッジAI 画像解析デモ</h2>
+        <!-- 状況やエラーをスマホ画面に直接出すためのデバッグ窓 -->
+        <div id="status">1. 初期化中...</div>
+        
+        <!-- カメラ映像（スマホ用にインライン再生を強制） -->
+        <video id="webcam" autoplay playsinline muted></video>
+        
+        <div id="result">---</div>
+    </div>
 
     <script>
         const video = document.getElementById('webcam');
@@ -31,49 +34,68 @@
         const statusDiv = document.getElementById('status');
         let model;
 
-        // ③ カメラとAIを起動するメイン処理
+        function updateStatus(text) {
+            statusDiv.innerText = text;
+            console.log(text);
+        }
+
         async function startApp() {
             try {
-                // 1. スマホやPCのカメラ映像を取得して画面に流す
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" }, 
-                    audio: false 
-                });
+                updateStatus("2. カメラの起動をリクエスト中...");
+                
+                // スマホの背面カメラを確実に指定し、カクつきを防ぐ設定
+                const constraints = {
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
+                
+                // スマホのSafari対策：映像が読み込まれるまで待つ
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
 
-                // 2. Googleの学習済みAIモデル（MobileNet）をローカルに読み込む
+                updateStatus("3. GoogleからAIモデルをダウンロード中（数秒かかります）...");
                 model = await mobilenet.load();
-                statusDiv.innerText = "AI起動完了！カメラに物を映してください。";
-
-                // 3. リアルタイムで画像解析をループさせる
+                
+                updateStatus("4. AI起動完了！カメラに物を映してください。");
                 predictLoop();
+
             } catch (err) {
-                statusDiv.innerText = "エラー: カメラの起動またはAIの読み込みに失敗しました。";
-                console.error(err);
+                // スマホの画面にエラーの正体を直接書き出す
+                updateStatus("【エラー発生】: " + err.name + " - " + err.message + "\n※SafariやChromeアプリなど、通常のブラウザで直接URLを開き、カメラを許可してください。");
+                resultDiv.innerText = "起動失敗";
             }
         }
 
-        // ④ 1秒間に数回、カメラの映像をAIに判定させるループ関数
         async function predictLoop() {
-            if (model && video.readyState === 4) {
-                // カメラの「今この瞬間」の画像をAIに入力して判定（推論）させる
-                const predictions = await model.classify(video);
-                
-                if (predictions.length > 0) {
-                    // 一番確率が高い結果（英語）と、その確率（％）を取得
-                    const topResult = predictions[0].className;
-                    const probability = Math.round(predictions[0].probability * 100);
+            try {
+                if (model && video.readyState === 4) {
+                    const predictions = await model.classify(video);
                     
-                    // 画面に結果を表示（例: "mouse (85%)"）
-                    resultDiv.innerText = `${topResult} (${probability}%)`;
+                    if (predictions.length > 0) {
+                        const topResult = predictions[0].className;
+                        const probability = Math.round(predictions[0].probability * 100);
+                        resultDiv.innerText = `${topResult} (${probability}%)`;
+                    }
                 }
+            } catch (e) {
+                console.error("ループ内エラー:", e);
             }
-            // 次のフレームも続けて判定する（ループさせる）
             requestAnimationFrame(predictLoop);
         }
 
-        // アプリを起動
-        startApp();
+        // ページ読み込み完了後に起動
+        window.addEventListener('load', startApp);
     </script>
 </body>
 </html>
