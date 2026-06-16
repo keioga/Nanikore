@@ -50,15 +50,7 @@ async function initAI() {
     }
 }
 
-// 簡易日本語対応辞書
-const jaLabels = {
-    "person": "人", "bicycle": "自転車", "car": "車", "motorcycle": "バイク",
-    "backpack": "リュック", "umbrella": "傘", "handbag": "ハンドバッグ", "tie": "ネクタイ",
-    "suitcase": "スーツケース", "bottle": "ボトル", "cup": "コップ", "chair": "椅子",
-    "couch": "ソファ", "potted plant": "観葉植物", "dining table": "机", "tv": "テレビ",
-    "laptop": "ノートパソコン", "mouse": "マウス", "remote": "リモコン", "keyboard": "キーボード",
-    "cell phone": "スマホ", "book": "本", "clock": "時計", "scissors": "ハサミ"
-};
+
 
 let lastTime = -1;
 async function predictLoop() {
@@ -76,7 +68,7 @@ async function predictLoop() {
         for (let detection of detections) {
             const score = Math.round(detection.categories[0].score * 100);
             const englishLabel = detection.categories[0].categoryName;
-            const labelText = jaLabels[englishLabel] || englishLabel;
+            const labelText = detection.categories[0].categoryName;
 
             const videoWidth = video.offsetWidth;
             const videoHeight = video.offsetHeight;
