@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIカメラ認識 PWA</title>
+    <title>AIカメラ認識 PWA (日本語版)</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f0f2f5; }
-        #video { width: 100%; max-width: 400px; border-radius: 8px; transform: scaleX(1); }
-        #result { font-size: 1.2rem; font-weight: bold; margin-top: 15px; color: #333; }
-        #status { color: #666; margin-bottom: 10px; }
+        #video { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 10px; }
+        #result { font-size: 1.4rem; font-weight: bold; margin-top: 15px; color: #007bff; }
+        #status { color: #666; margin-bottom: 10px; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -26,11 +26,25 @@
         const resultDiv = document.getElementById('result');
         let model;
 
+        // 無料の翻訳APIを使って英語を日本語に変換する関数
+        async function translateToJapanese(text) {
+            try {
+                // コンマ区切りの複数の単語から最初の1つを抽出（例: "refrigerator, fridge" -> "refrigerator"）
+                const cleanText = text.split(',')[0].trim();
+                
+                const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ja&dt=t&q=${encodeURIComponent(cleanText)}`);
+                const data = await res.json();
+                return data[0][0][0]; // 翻訳されたテキストを返す
+            } catch (e) {
+                return text; // 翻訳に失敗したら英語のまま出す
+            }
+        }
+
         // 1. カメラの起動
         async function setupCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }, // 背面カメラを優先
+                    video: { facingMode: 'environment' }, // スマホの背面カメラを優先
                     audio: false
                 });
                 video.srcObject = stream;
@@ -38,39 +52,46 @@
                     video.onloadedmetadata = () => resolve(video);
                 });
             } catch (e) {
-                statusDiv.innerText = "カメラの起動に失敗しました。詳細: " + e.message;
+                statusDiv.innerText = "カメラの起動に失敗しました: " + e.message;
             }
         }
 
-        // 2. AIモデルの読み込みと連続認識
+        // 2. メイン処理
         async function main() {
             await setupCamera();
-            statusDiv.innerText = "カメラ起動完了。AIモデルを読み込んでいます...";
+            statusDiv.innerText = "カメラ起動完了。AIを準備中...";
             
-            // MobileNetモデルのロード
             model = await mobilenet.load();
             statusDiv.innerText = "準備完了！カメラに物を映してください。";
 
-            // リアルタイム認識のループ
             predictLoop();
         }
 
+        // 3. 認識のループ処理
+        let lastPredictedText = "";
         async function predictLoop() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // 画像から予測を実行
                 const predictions = await model.classify(video);
+                
                 if (predictions.length > 0) {
-                    // 最も確率の高い結果を表示（英語で返ってきます）
                     const topResult = predictions[0];
+                    const englishName = topResult.className;
                     const probability = Math.round(topResult.probability * 100);
-                    resultDiv.innerText = `これは「${topResult.className}」ですか？ (${probability}%)`;
+
+                    // 認識結果が変わったときだけ翻訳APIを叩く（負荷軽減のため）
+                    if (englishName !== lastPredictedText && probability > 50) {
+                        lastPredictedText = englishName;
+                        
+                        // 日本語に翻訳
+                        const japaneseName = await translateToJapanese(englishName);
+                        resultDiv.innerText = `これは「${japaneseName}」ですか？ (${probability}%)`;
+                    }
                 }
             }
-            // 次のフレームで再実行（ループ）
-            requestAnimationFrame(predictLoop);
+            // 少し間隔を空けて次のフレームを処理（1秒に2回程度にして動作を安定させる）
+            setTimeout(predictLoop, 500);
         }
 
-        // アプリ起動
         main();
     </script>
 </body>
