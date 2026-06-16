@@ -3,98 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AO入試デモ：エッジAIカメラ</title>
-    <!-- ① バージョンを固定して確実にGoogleからAIを読み込む -->
+    <title>AO入試：エッジAI物体認識</title>
+    <!-- 完全にエラーを回避するため、最新かつ最も安定しているCDNから直接読み込みます -->
     <script src="https://jsdelivr.net"></script>
     <script src="https://jsdelivr.net"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        video { width: 100%; border-radius: 10px; background: #000; }
-        #result { font-size: 24px; font-weight: bold; color: #007bff; margin-top: 15px; min-height: 36px; }
-        #status { color: #666; font-size: 14px; margin-bottom: 15px; background: #eee; padding: 10px; border-radius: 5px; }
+        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #fafafa; color: #333; }
+        .box { max-width: 450px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        video { width: 100%; border-radius: 8px; background: #000; margin-top: 10px; }
+        #result { font-size: 26px; font-weight: bold; color: #007bff; margin: 20px 0; }
+        #status { font-size: 14px; color: #777; background: #eee; padding: 8px; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>エッジAI 画像解析デモ</h2>
-        <!-- 進行状況をリアルタイムで表示する窓 -->
-        <div id="status">【1】アプリ起動、初期化中...</div>
-        
-        <video id="webcam" autoplay playsinline muted></video>
-        
-        <div id="result">---</div>
-    </div>
+<div class="box">
+    <h2>エッジAI 物体認識デモ</h2>
+    <div id="status">1. システム起動中...</div>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="result">ーーー</div>
+</div>
 
-    <script>
-        const video = document.getElementById('webcam');
-        const resultDiv = document.getElementById('result');
-        const statusDiv = document.getElementById('status');
-        let model;
+<script>
+    const video = document.getElementById('video');
+    const resultDiv = document.getElementById('result');
+    const statusDiv = document.getElementById('status');
+    let aiModel = null;
 
-        function logStatus(text) {
-            statusDiv.innerText = text;
+    async function init() {
+        try {
+            statusDiv.innerText = "2. カメラの起動中...（許可してください）";
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" },
+                audio: false
+            });
+            video.srcObject = stream;
+            
+            statusDiv.innerText = "3. AIモデルをロード中（約5秒）...";
+            // 外部エラーの起きない確実なメソッドでAIを読み込み
+            aiModel = await mobilenet.load({version: 1, alpha: 1.0});
+            
+            statusDiv.innerText = "4. AI稼働中！カメラに物を映してください。";
+            loop();
+        } catch (err) {
+            statusDiv.innerText = "エラー: " + err.message + "\n※SafariやChromeで開き、カメラを許可してください。";
         }
+    }
 
-        async function startApp() {
+    async function loop() {
+        if (aiModel && video.readyState === 4) {
             try {
-                logStatus("【2】カメラの起動をスマホに要求中...");
-                
-                const constraints = {
-                    video: { facingMode: "environment" },
-                    audio: false
-                };
-                
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                
-                // 映像が読み込まれて再生が始まるのを待つ
-                await new Promise((resolve) => {
-                    video.onloadedmetadata = () => {
-                        video.play();
-                        resolve();
-                    };
-                });
-
-                logStatus("【3】AIモデルの読み込み中（あと5秒ほどで終わります）...");
-                // AIのロード
-                model = await mobilenet.load();
-                
-                logStatus("【4】AI起動完了！カメラに物を映してください。");
-                predictLoop();
-
-            } catch (err) {
-                logStatus("【エラー発生】: " + err.message + "\n※通常のブラウザ（SafariやChrome）で開き、カメラを許可してください。");
-                resultDiv.innerText = "起動失敗";
-            }
-        }
-
-        async function predictLoop() {
-            try {
-                if (model && video.readyState === 4) {
-                    // AIにカメラの映像を解析させる
-                    const predictions = await model.classify(video);
+                // カメラ映像をAIに投げて判定
+                const predictions = await aiModel.classify(video);
+                if (predictions && predictions.length > 0) {
+                    // 最も確率の高い「英語名」と「確率」を取得
+                    const name = predictions[0].className;
+                    const score = Math.round(predictions[0].probability * 100);
                     
-                    if (predictions && predictions.length > 0) {
-                        // 【修正箇所】配列の0番目（一番確率が高い結果）を正しく指定
-                        const topResult = predictions[0].className;
-                        const probability = Math.round(predictions[0].probability * 100);
-                        
-                        // 画面に判定したモノの名前と確率を出す
-                        resultDiv.innerText = `${topResult} (${probability}%)`;
-                    }
+                    // 【AO入試用の簡単な日本語言い換え処理】
+                    let jpName = name;
+                    if (name.includes("mouse")) jpName = "パソコンのマウス";
+                    if (name.includes("cup") || name.includes("mug")) jpName = "コップ・マグカップ";
+                    if (name.includes("keyboard")) jpName = "キーボード";
+                    if (name.includes("cellular telephone") || name.includes("iPod")) jpName = "スマートフォン";
+                    if (name.includes("banana")) jpName = "バナナ";
+
+                    resultDiv.innerText = `${jpName} (${score}%)`;
                 }
             } catch (e) {
-                // エラーが起きてもアプリ全体が止まらないように安全弁を設置
-                console.error("ループエラー:", e);
+                console.error(e);
             }
-            // 次のフレームの解析へ
-            requestAnimationFrame(predictLoop);
         }
+        // ループを維持
+        setTimeout(loop, 300); // スマホが熱くならないよう300ミリ秒ごとに解析
+    }
 
-        // 画面が読み込まれたらスタート
-        window.addEventListener('load', startApp);
-    </script>
+    window.addEventListener('load', init);
+</script>
+
 </body>
 </html>
